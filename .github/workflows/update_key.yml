@@ -60,8 +60,8 @@ jobs:
                   }
                 ],
                 \"footer\": {
-                  # Use the shell variable holding the UTC time string
-                  \"text\": \"Key updated at $CURRENT_DATE\"
+                  # The date command runs and inserts the UTC time string directly
+                  \"text\": \"Key updated at $(date +%Y-%m-%d\ %H:%M\ UTC)\"
                 }
               }
             ]
