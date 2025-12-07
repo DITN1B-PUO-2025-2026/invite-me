@@ -44,24 +44,22 @@ jobs:
           CURRENT_DATE="$(date +%Y-%m-%d\ %H:%M\ UTC)"
           
           # 1. Define the JSON payload using secure double quotes and escaped internal quotes
-          DISCORD_PAYLOAD="
-          {
-            \"content\": \"@everyone **🔑 GitHub Invite Key Rotated!**\",
-            \"embeds\": [
+          DISCORD_PAYLOAD="{
+            "content": "**🔑 GitHub Invite Key Rotated!**",
+            "embeds": [
               {
-                \"title\": \"New Organization Invitation Label Key\",
-                \"description\": \"The key has been updated. Use this new key in an issue >\",
-                \"color\": 3447003,
-                \"fields\": [
+                "title": "Organization Invitation Label Key",
+                "description": "The key has been updated. Use this new key in an issue https://github.com/DITN1B-PUO-2025-2026/invite-me/issues",
+                "color": 3447003,
+                "fields": [
                   {
-                    \"name\": \"🔑 Current Key\",
-                    \"value\": \"$NEW_KEY\",
-                    \"inline\": false
+                    "name": "🔑 Current Key",
+                    "value": "'"'"$NEW_KEY"'"'",
+                    "inline": false
                   }
                 ],
-                \"footer\": {
-                  # The date command runs and inserts the UTC time string directly
-                  \"text\": \"Key updated at $(date +%Y-%m-%d\ %H:%M\ UTC)\"
+                "footer": {
+                  "text": "Key updated at '"'"$(date +%Y-%m-%d\ %H:%M\ UTC)"'"'"
                 }
               }
             ]
