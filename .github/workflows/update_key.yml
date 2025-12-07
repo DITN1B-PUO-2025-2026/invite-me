@@ -10,7 +10,7 @@ on:
 jobs:
   rotate:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Generate Random Label Key
         id: generate_key
@@ -57,10 +57,10 @@ jobs:
           }'
 
           curl -X POST \
-               -H "Authorization: ${{ secrets.BOT_AUTHORIZATION_HEADER} }}" \
+               -H "Authorization: ${{ secrets.BOT_AUTHORIZATION_HEADER }}" \
                -H "Content-Type: application/json" \
                -d "$DISCORD_PAYLOAD" \
-               "${{ secrets.DISCORD_WEBHOOK_URL} }}"
+               "${{ secrets.DISCORD_WEBHOOK_URL }}"
 
       - name: Invite on label
         uses: vj-abigo/invite-on-label@v1.4
