@@ -43,12 +43,21 @@ jobs:
           BOT_AUTH_HEADER: ${{ secrets.BOT_AUTHORIZATION_HEADER }}
           DISCORD_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         with:
-          # Use Node.js to securely build and send the request
           script: |
             const key = process.env.NEW_KEY;
             const authHeader = process.env.BOT_AUTH_HEADER;
             const discordUrl = process.env.DISCORD_URL;
-            const dateString = new Date().toISOString().slice(0, 16).replace('T', ' ');
+            
+            // 🚨 Timezone FIX: Use sv-SE locale for YYYY-MM-DD HH:MM format in Kuala Lumpur timezone (MYT) 🚨
+            const mytTime = new Date().toLocaleString('en-GB', {
+              timeZone: 'Asia/Kuala_Lumpur',
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true // This ensures AM/PM is used
+            });
             
             // 1. Construct the JSON payload (JavaScript object)
             const payload = {
@@ -63,18 +72,17 @@ jobs:
                   inline: false
                 }],
                 footer: {
-                  // Note: This uses Node's standard time, adjust as needed.
-                  text: `Key updated at ${dateString} UTC`
+                  // Use the localized time string and manually append the MYT suffix
+                  text: `Key updated at ${mytTime} MYT`
                 }
               }]
             };
-
+            
             // 2. Use fetch (Node's standard HTTP client) to send the request
             const response = await fetch(discordUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                // Authorization header is passed here
                 'Authorization': authHeader
               },
               body: JSON.stringify(payload)
