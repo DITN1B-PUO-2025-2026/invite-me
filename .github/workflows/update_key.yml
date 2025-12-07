@@ -68,12 +68,3 @@ jobs:
                \"$DISCORD_WEBHOOK_URL\""
 
           bash -c "$CURL_COMMAND"
-
-          # Check for success
-          if [ $? -eq 0 ]; then
-              echo "Discord message sent successfully."
-          else
-              echo "Error sending Discord message."
-          fi
-
-
