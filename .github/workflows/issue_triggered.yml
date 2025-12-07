@@ -16,57 +16,66 @@ jobs:
         env:
           EXPECTED_KEY: ${{ secrets.INVITE_LABEL_KEY }}
         run: |
-          # Extract the key from the issue body (using the INVITE_KEY: marker)
-          INVITE_KEY=$(echo "${{ github.event.issue.body }}" | grep 'INVITE_KEY:' | awk '{print $2}' | tr -d '[:space:]')
-          EXPECTED_KEY_CLEAN=$(echo "$EXPECTED_KEY" | tr -d '[:space:]')
-
-          # Set output to be used in the next step
+          # 1. Extract the key from the issue body
+          # Note: Added 'tr -d "\n"' to handle multi-line issue body and ensure one-line key
+          INVITE_KEY=$(echo "${{ github.event.issue.body }}" | grep 'INVITE_KEY:' | awk '{print $2}' | tr -d '[:space:]' | tr -d '"')
+          EXPECTED_KEY_CLEAN=$(echo "$EXPECTED_KEY" | tr -d '[:space:]' | tr -d '"')
+          
+          # 2. Set output for the next step to use
           if [ "$INVITE_KEY" == "$EXPECTED_KEY_CLEAN" ]; then
             echo "key_matched=true" >> $GITHUB_OUTPUT
           else
             echo "key_matched=false" >> $GITHUB_OUTPUT
           fi
           
-          # Pass the username of the issue creator
+          # 3. Pass the username of the issue creator
           echo "username=${{ github.event.issue.user.login }}" >> $GITHUB_OUTPUT
 
-      - name: Invite User and Comment
+      - name: Invite User and Post Comment
         uses: actions/github-script@v6
-        if: steps.extract.outputs.key_matched == 'true'
+        # FIX: The step runs regardless of key match, the script handles the logic.
+        # This guarantees the comment will be posted.
         with:
-          # Use the powerful INVITE_TOKEN for org admin tasks
+          # Use the INVITE_TOKEN for org admin tasks (must have admin:org scope)
           github-token: ${{ secrets.INVITE_TOKEN }} 
           script: |
+            const keyMatched = '${{ steps.extract.outputs.key_matched }}';
             const user = context.payload.issue.user.login;
             const org = 'DITN1B-PUO-2025-2026';
             const issue_number = context.issue.number;
             const repo = context.repo.repo;
             
             let message = '';
+            
+            // --- SCENARIO 1: KEY MATCH FAILURE ---
+            if (keyMatched === 'false') {
+                message = "The secret key provided in the issue body is incorrect. Please ensure you have the correct key and try again. The issue remains open.";
+            } 
+            // --- SCENARIO 2: KEY MATCH SUCCESS ---
+            else {
+                try {
+                  // Attempt to invite the user to the organization
+                  await github.rest.orgs.setMembershipForUser({
+                    org: org,
+                    username: user,
+                    role: 'member' // Change to 'admin' if necessary
+                  });
+                  
+                  message = `**Welcome to ${org}, @${user}!** 🎉 You have been invited successfully.`;
 
-            try {
-              // 1. Attempt to invite the user to the organization
-              await github.rest.orgs.setMembershipForUser({
-                org: org,
-                username: user,
-                role: 'member' // or 'admin', depending on your goal
-              });
-              
-              message = `**Welcome to ${org}!** 🎉 You have been invited successfully.`;
-
-            } catch (error) {
-              // Handle case where user is already a member (HTTP 422 - Unprocessable Entity)
-              if (error.status === 422) {
-                 message = `Hello @${user}, you are **already a member** of the ${org} organization :D`;
-              } else {
-                 // Log other errors (e.g., token scope issue)
-                 console.error('Invite failed:', error);
-                 message = `**ERROR:** I could not invite you due to an internal error. Please contact an admin. (Error Status: ${error.status})`;
-              }
+                } catch (error) {
+                  // Handle case where user is already a member (HTTP 422 - Unprocessable Entity)
+                  if (error.status === 422) {
+                     message = `Hello @${user}, you are **already a member** of the ${org} organization :D.`;
+                  } else {
+                     // Log other errors (e.g., token scope issue)
+                     console.error('Invite failed:', error);
+                     message = `**ERROR:** I could not invite you due to an internal error (${error.status}). Please contact an admin.`;
+                  }
+                }
             }
-
-            // 2. Post the result as a comment on the issue
-            // We use the same powerful token here, which has organization and repo/issue write scopes
+            
+            // 3. Post the result as a comment on the issue (Guaranteed)
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: repo,
