@@ -41,7 +41,7 @@ jobs:
           BOT_AUTHORIZATION_HEADER: ${{ secrets.BOT_AUTHORIZATION_HEADER }} # Pass Authorization Header to env
           NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
         run: |
-          DISCORD_PAYLOAD="{
+          DISCORD_PAYLOAD='{
             "content": "**🔑 GitHub Invite Key Rotated!**",
             "embeds": [
               {
@@ -60,7 +60,7 @@ jobs:
                 }
               }
             ]
-          }"
+          }'
 
           curl -X POST \
                -H "Authorization: ${BOT_AUTHORIZATION_HEADER}" \
