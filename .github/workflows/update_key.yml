@@ -1,0 +1,74 @@
+name: Rotate Invitation Label Key
+
+on:
+  schedule:
+    # Runs at 00:00 UTC daily. Adjust the cron schedule as needed.
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    # Allows manual running
+
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+
+    if: success() && secrets.DISCORD_WEBHOOK_URL != '' 
+    
+    steps:
+      - name: Generate Random Label Key
+        id: generate_key
+        run: |
+          # Generates a 32-character hexadecimal string
+          NEW_KEY=$(openssl rand -hex 32)
+          echo "NEW_KEY=$NEW_KEY" >> $GITHUB_OUTPUT
+
+      - name: Update Repository Secret
+        env:
+          GH_TOKEN: ${{ secrets.PAT_FOR_SECRETS_UPDATE }}
+          NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
+          SECRET_NAME: INVITE_LABEL_KEY
+        run: |
+          # Use the GitHub CLI to update the secret
+          gh secret set $SECRET_NAME --body "$NEW_KEY" -R $GITHUB_REPOSITORY
+          echo "🔄 Secret ${{ env.SECRET_NAME }} has been updated."
+
+      - name: Send New Key to Discord via Webhook
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
+        run: |
+          # Define the JSON payload for the Discord webhook
+          DISCORD_PAYLOAD='{
+            "content": "**🔑 GitHub Invite Key Rotated!**",
+            "embeds": [
+              {
+                "title": "New Organization Invitation Label Key",
+                "description": "Use this key in an issue label within the next 24 hours to trigger an invitation. The previous key is now invalid.",
+                "color": 3447003,
+                "fields": [
+                  {
+                    "name": "🔑 Current Key",
+                    "value": "'"'"$NEW_KEY"'"'",
+                    "inline": false
+                  }
+                ],
+                "footer": {
+                  "text": "Key updated at '"'"$(date +%Y-%m-%d\ %H:%M\ UTC)"'"'"
+                }
+              }
+            ]
+          }'
+
+          # Send the payload to the Discord Webhook URL
+          curl -H "Content-Type: application/json" \
+               -d "$DISCORD_PAYLOAD" \
+               $DISCORD_WEBHOOK
+
+      - name: Invite on label
+        uses: vj-abigo/invite-on-label@v1.4
+        with:
+          organization: DITN1B-PUO-2025-2026
+          label: ${{ env.SECRET_NAME }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          comment: 'Welcome to the Org.'
+        env:
+          INVITE_TOKEN: ${{ secrets.INVITE_TOKEN }}
