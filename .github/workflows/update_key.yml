@@ -62,16 +62,8 @@ jobs:
             ]
           }"
 
-          # Use the environment variables ($VARIABLE_NAME) in the curl command
-          echo "Sending Discord notification with @everyone ping..."
-
-          CURL_COMMAND="curl -s -X POST \
-               -H \"Authorization: $BOT_AUTHORIZATION_HEADER\" \
-               -H \"Content-Type: application/json\" \
-               -d '$DISCORD_PAYLOAD' \
-               -o /dev/null \
-               \"$DISCORD_WEBHOOK_URL\""
-
-          bash -c "$CURL_COMMAND"
-
-          echo "✅ Discord notification sent."
+          curl -X POST \
+               -H "Authorization: ${BOT_AUTHORIZATION_HEADER}" \
+               -H "Content-Type: application/json" \
+               -d "$DISCORD_PAYLOAD" \
+               "${DISCORD_WEBHOOK_URL}"
