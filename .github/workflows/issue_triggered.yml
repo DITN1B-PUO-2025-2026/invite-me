@@ -6,8 +6,8 @@ on:
 jobs:
   invite:
     runs-on: ubuntu-latest
-    permissions: # ADD THIS BLOCK for issue commenting
-      issues: write
+    permissions:
+      issues: write # Needed for the action to post comments (the "Welcome" message)
       contents: read
     steps:
       - name: Invite on label
@@ -15,8 +15,10 @@ jobs:
         with:
           organization: DITN1B-PUO-2025-2026
           label: ${{ secrets.INVITE_LABEL_KEY }}
-          # FIX: Use the powerful PAT for org-level actions and repo-level commenting.
-          repo-token: ${{ secrets.INVITE_TOKEN }} 
+          # REMOVE: repo-token is not the correct input for this specific action
+          # repo-token: ${{ secrets.INVITE_TOKEN }} 
           comment: 'Welcome to the Org. You have been invited successfully! 🎉'
           existingMemberMessage: 'You are already a member of the organization :D '
-          
+        # FIX: Pass the token as an environment variable named INVITE_TOKEN
+        env:
+          INVITE_TOKEN: ${{ secrets.INVITE_TOKEN }}
