@@ -21,7 +21,7 @@ jobs:
         id: generate_key
         run: |
           # Generates a 32-character hexadecimal string
-          NEW_KEY=$(openssl rand -hex 32)
+          NEW_KEY=$(openssl rand -hex 4)
           echo "::add-mask::$NEW_KEY"
           echo "NEW_KEY=$NEW_KEY" >> $GITHUB_OUTPUT
 
