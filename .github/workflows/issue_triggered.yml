@@ -1,7 +1,6 @@
 name: Invite user from Issue Body Key
 on:
   issues:
-    # Change trigger from 'labeled' to 'opened'
     types: [opened] 
 
 jobs:
@@ -10,29 +9,30 @@ jobs:
     permissions:
       issues: write
       contents: read
-    # Add an 'if' condition to run only if the event is a new issue
     if: github.event_name == 'issues' && github.event.action == 'opened'
     steps:
       - name: Extract Key from Issue Body
         id: extract
+        # Pass the secret as an environment variable within this step
+        env:
+          EXPECTED_KEY: ${{ secrets.INVITE_LABEL_KEY }}
         run: |
-          # Define the secret key you are looking for (e.g., in a specific format)
-          # Assuming the key is exactly on a single line, e.g., "INVITE_KEY: YOUR_SECRET_KEY"
-          # This uses grep to find the line and awk to get the key part
+          # The user's key extracted from the issue body
           INVITE_KEY=$(echo "${{ github.event.issue.body }}" | grep 'INVITE_KEY:' | awk '{print $2}')
           
-          # Pass the extracted key as an output
+          # Pass the extracted key as a step output
           echo "key=$INVITE_KEY" >> $GITHUB_OUTPUT
+          
+          # Also pass the EXPECTED_KEY as a step output so it can be used in the 'if' condition below
+          echo "expected_key=$EXPECTED_KEY" >> $GITHUB_OUTPUT
 
       - name: Run Invite Action if Key Matches
         uses: vj-abigo/invite-on-label@v1.4
-        # Add an 'if' condition: run only if the extracted key matches your expected secret key
-        if: steps.extract.outputs.key == secrets.INVITE_LABEL_KEY
+        # FIX: Compare the extracted key (output) with the expected key (also output from the first step)
+        if: steps.extract.outputs.key == steps.extract.outputs.expected_key
         with:
           organization: DITN1B-PUO-2025-2026
-          # The 'label' input is now irrelevant, but the action might require it. 
-          # We can pass a dummy value since the key check is in the 'if' condition.
-          label: 'key-detected' 
+          label: 'key-detected' # Dummy label
           comment: 'Welcome to the Org. You have been invited successfully! 🎉'
           existingMemberMessage: 'You are already a member of the organization :D '
         env:
