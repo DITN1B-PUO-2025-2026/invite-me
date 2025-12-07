@@ -25,13 +25,6 @@ jobs:
           NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
           SECRET_NAME: INVITE_LABEL_KEY
         run: |
-          # Mask the generated key
-          echo "::add-mask::${{ steps.generate_key.outputs.NEW_KEY }}"
-          # Mask the Authorization Header (which contains the Bot Token)
-          echo "::add-mask::${{ secrets.BOT_AUTHORIZATION_HEADER }}"
-          # Mask the Discord Webhook URL (as it's also a secret)
-          echo "::add-mask::${{ secrets.DISCORD_WEBHOOK_URL }}"
-          
           # Use the GitHub CLI to update the secret
           gh secret set $SECRET_NAME --body "$NEW_KEY" -R $GITHUB_REPOSITORY
           echo "🔄 Secret ${{ env.SECRET_NAME }} has been updated."
