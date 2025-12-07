@@ -12,6 +12,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Convert Time to MYT
+        id: convert_time
+        uses: sv-SE/timezone-converter@v1.0.0
+        with:
+          # Use the current job run time (default is UTC)
+          from_format: 'YYYY-MM-DD HH:mm'
+          # Target timezone for Malaysia
+          to_timezone: 'Asia/Kuala_Lumpur'
+          # Target display format (MYT is manually added below)
+          to_format: 'YYYY-MM-DD HH:mm'
+
       - name: Generate Random Label Key
         id: generate_key
         run: |
@@ -51,17 +62,21 @@ jobs:
                   }
                 ],
                 "footer": {
-                  "text": "Key updated at '"'"$(date +%Y-%m-%d\ %H:%M\ UTC)"'"'"
+                  "text": "Key updated at '"'"$MYT_TIME MYT"'"'"
                 }
               }
             ]
           }'
 
           # Use the environment variables ($VARIABLE_NAME) in the curl command
-          echo "Sending Discord notification with @everyone ping..."
+          echo "Sending Discord notification"
+          CURL_COMMAND="curl -s -X POST \
+               -H \"Authorization: $BOT_AUTHORIZATION_HEADER\" \
+               -H \"Content-Type: application/json\" \
+               -d '$DISCORD_PAYLOAD' \
+               -o /dev/null \
+               \"$DISCORD_WEBHOOK_URL\""
 
-          curl -X POST \
-               -H "Authorization: $BOT_AUTHORIZATION_HEADER" \
-               -H "Content-Type: application/json" \
-               -d "$DISCORD_PAYLOAD" \
-               "$DISCORD_WEBHOOK_URL"
+          # Execute the command secretly
+          bash -c "$CURL_COMMAND"
+          echo "✅ Discord notification sent."
