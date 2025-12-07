@@ -7,19 +7,23 @@ jobs:
   invite:
     runs-on: ubuntu-latest
     permissions:
-      issues: write # Needed for commenting
+      issues: write # Grants the GITHUB_TOKEN permission to post comments
       contents: read
     if: github.event_name == 'issues' && github.event.action == 'opened'
     steps:
       - name: Extract Key from Issue Body and Compare
         id: extract
         env:
+          # IMPORTANT: This secret MUST be set to your actual secret string (e.g., GUESTPASS2025), not the literal "INVITE_KEY"
           EXPECTED_KEY: ${{ secrets.INVITE_LABEL_KEY }}
         run: |
-          # 1. Extract the key from the issue body
-          # Note: Added 'tr -d "\n"' to handle multi-line issue body and ensure one-line key
-          INVITE_KEY=$(echo "${{ github.event.issue.body }}" | grep 'INVITE_KEY:' | awk '{print $2}' | tr -d '[:space:]' | tr -d '"')
-          EXPECTED_KEY_CLEAN=$(echo "$EXPECTED_KEY" | tr -d '[:space:]' | tr -d '"')
+          # 1. Use awk to find 'INVITE_KEY:' and extract the value after it. xargs cleans up whitespace.
+          # This is more robust than looking for the Nth word.
+          INVITE_KEY=$(echo "${{ github.event.issue.body }}" | awk -F'INVITE_KEY:' '{print $2}' | xargs | head -n 1)
+          EXPECTED_KEY_CLEAN=$(echo "$EXPECTED_KEY" | xargs | head -n 1)
+          
+          echo "Expected Key: $EXPECTED_KEY_CLEAN"
+          echo "User Key: $INVITE_KEY"
           
           # 2. Set output for the next step to use
           if [ "$INVITE_KEY" == "$EXPECTED_KEY_CLEAN" ]; then
@@ -28,57 +32,60 @@ jobs:
             echo "key_matched=false" >> $GITHUB_OUTPUT
           fi
           
-          # 3. Pass the username of the issue creator
-          echo "username=${{ github.event.issue.user.login }}" >> $GITHUB_OUTPUT
-
-      - name: Invite User and Post Comment
+      - name: Invite User (using PAT)
         uses: actions/github-script@v6
-        # FIX: The step runs regardless of key match, the script handles the logic.
-        # This guarantees the comment will be posted.
+        id: invite
+        # Use the powerful INVITE_TOKEN (PAT) for the sensitive Organization API call
         with:
-          # Use the INVITE_TOKEN for org admin tasks (must have admin:org scope)
           github-token: ${{ secrets.INVITE_TOKEN }} 
           script: |
             const keyMatched = '${{ steps.extract.outputs.key_matched }}';
             const user = context.payload.issue.user.login;
             const org = 'DITN1B-PUO-2025-2026';
-            const issue_number = context.issue.number;
-            const repo = context.repo.repo;
             
             let message = '';
             
             // --- SCENARIO 1: KEY MATCH FAILURE ---
             if (keyMatched === 'false') {
-                message = "The secret key provided in the issue body is incorrect. Please ensure you have the correct key and try again. The issue remains open.";
+                message = "The secret key provided in the issue body is incorrect. Please ensure you have the correct key and the format is `INVITE_KEY: YOUR_KEY`. The issue remains open.";
             } 
             // --- SCENARIO 2: KEY MATCH SUCCESS ---
             else {
                 try {
-                  // Attempt to invite the user to the organization
+                  // 1. Attempt to invite the user
                   await github.rest.orgs.setMembershipForUser({
                     org: org,
                     username: user,
-                    role: 'member' // Change to 'admin' if necessary
+                    role: 'member'
                   });
                   
                   message = `**Welcome to ${org}, @${user}!** 🎉 You have been invited successfully.`;
 
                 } catch (error) {
-                  // Handle case where user is already a member (HTTP 422 - Unprocessable Entity)
+                  // 2. Handle errors (like user already being a member)
                   if (error.status === 422) {
                      message = `Hello @${user}, you are **already a member** of the ${org} organization :D.`;
                   } else {
-                     // Log other errors (e.g., token scope issue)
                      console.error('Invite failed:', error);
-                     message = `**ERROR:** I could not invite you due to an internal error (${error.status}). Please contact an admin.`;
+                     message = `**ERROR:** The invite failed with status **${error.status}**. This may indicate a missing organization permission on the INVITE_TOKEN. Please contact an admin.`;
                   }
                 }
             }
             
-            // 3. Post the result as a comment on the issue (Guaranteed)
+            // Pass the resulting message to the next step for commenting
+            core.setOutput('comment_body', message);
+
+      - name: Post Comment (using GITHUB_TOKEN)
+        uses: actions/github-script@v6
+        # FIX: Use the default GITHUB_TOKEN, which has 'issues: write' permission from the job block.
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }} 
+          script: |
+            const commentBody = '${{ steps.invite.outputs.comment_body }}';
+            
             await github.rest.issues.createComment({
               owner: context.repo.owner,
-              repo: repo,
-              issue_number: issue_number,
-              body: message
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: commentBody
             });
