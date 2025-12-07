@@ -31,16 +31,17 @@ jobs:
 
       - name: Send New Key to Discord via Webhook
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }} # Pass URL to env
+          BOT_AUTHORIZATION_HEADER: ${{ secrets.BOT_AUTHORIZATION_HEADER }} # Pass Authorization Header to env
           NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
         run: |
-          # Define the JSON payload for the Discord webhook
+          # Define the JSON payload (rest remains the same)
           DISCORD_PAYLOAD='{
-            "content": "@everyone **🔑 GitHub Invite Key Rotated!**",
+            "content": "**🔑 GitHub Invite Key Rotated!**",
             "embeds": [
               {
-                "title": "New Organization Invitation Label Key",
-                "description": "The key has been updated. Use this new key in an issue >",
+                "title": "Organization Invitation Label Key",
+                "description": "The key has been updated. Use this new key in an issue https://github.com/DITN1B-PUO-2025-2026/invite-me/issues",
                 "color": 3447003,
                 "fields": [
                   {
@@ -56,9 +57,11 @@ jobs:
             ]
           }'
 
+          # Use the environment variables ($VARIABLE_NAME) in the curl command
           curl -X POST \
-               -H "Authorization: ${{ secrets.BOT_AUTHORIZATION_HEADER }}" \
+               -H "Authorization: $BOT_AUTHORIZATION_HEADER" \
                -H "Content-Type: application/json" \
                -d "$DISCORD_PAYLOAD" \
-               "${{ secrets.DISCORD_WEBHOOK_URL }}"
-               
+               "$DISCORD_WEBHOOK_URL"
+
+
