@@ -12,13 +12,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Convert Time to MYT
-        id: convert_time
-        uses: sv-SE/timezone-converter@v1.0.0
-        with: # Ensure 'with:' is on the correct indentation level
-          from_format: 'YYYY-MM-DD HH:mm'
-          to_timezone: 'Asia/Kuala_Lumpur'
-          to_format: 'YYYY-MM-DD HH:mm'
+      - name: Setup timezone
+        uses: zcong1993/setup-timezone@master
+        with:
+          timezone: Asia/Shanghai
 
       - name: Generate Random Label Key
         id: generate_key
@@ -42,7 +39,6 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }} # Pass URL to env
           BOT_AUTHORIZATION_HEADER: ${{ secrets.BOT_AUTHORIZATION_HEADER }} # Pass Authorization Header to env
           NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
-          MYT_TIME: ${{ steps.convert_time.outputs.converted_time }}
         run: |
           # Define the JSON payload (rest remains the same)
           DISCORD_PAYLOAD='{
