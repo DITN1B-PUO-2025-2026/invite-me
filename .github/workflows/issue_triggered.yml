@@ -7,33 +7,69 @@ jobs:
   invite:
     runs-on: ubuntu-latest
     permissions:
-      issues: write
+      issues: write # Needed for commenting
       contents: read
     if: github.event_name == 'issues' && github.event.action == 'opened'
     steps:
-      - name: Extract Key from Issue Body
+      - name: Extract Key from Issue Body and Compare
         id: extract
-        # Pass the secret as an environment variable within this step
         env:
           EXPECTED_KEY: ${{ secrets.INVITE_LABEL_KEY }}
         run: |
-          # The user's key extracted from the issue body
-          INVITE_KEY=$(echo "${{ github.event.issue.body }}" | grep 'INVITE_KEY:' | awk '{print $2}')
-          
-          # Pass the extracted key as a step output
-          echo "key=$INVITE_KEY" >> $GITHUB_OUTPUT
-          
-          # Also pass the EXPECTED_KEY as a step output so it can be used in the 'if' condition below
-          echo "expected_key=$EXPECTED_KEY" >> $GITHUB_OUTPUT
+          # Extract the key from the issue body (using the INVITE_KEY: marker)
+          INVITE_KEY=$(echo "${{ github.event.issue.body }}" | grep 'INVITE_KEY:' | awk '{print $2}' | tr -d '[:space:]')
+          EXPECTED_KEY_CLEAN=$(echo "$EXPECTED_KEY" | tr -d '[:space:]')
 
-      - name: Run Invite Action if Key Matches
-        uses: vj-abigo/invite-on-label@v1.4
-        # FIX: Compare the extracted key (output) with the expected key (also output from the first step)
-        if: steps.extract.outputs.key == steps.extract.outputs.expected_key
+          # Set output to be used in the next step
+          if [ "$INVITE_KEY" == "$EXPECTED_KEY_CLEAN" ]; then
+            echo "key_matched=true" >> $GITHUB_OUTPUT
+          else
+            echo "key_matched=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Pass the username of the issue creator
+          echo "username=${{ github.event.issue.user.login }}" >> $GITHUB_OUTPUT
+
+      - name: Invite User and Comment
+        uses: actions/github-script@v6
+        if: steps.extract.outputs.key_matched == 'true'
         with:
-          organization: DITN1B-PUO-2025-2026
-          label: 'key-detected' # Dummy label
-          comment: 'Welcome to the Org. You have been invited successfully! 🎉'
-          existingMemberMessage: 'You are already a member of the organization :D '
-        env:
-          INVITE_TOKEN: ${{ secrets.INVITE_TOKEN }}
+          # Use the powerful INVITE_TOKEN for org admin tasks
+          github-token: ${{ secrets.INVITE_TOKEN }} 
+          script: |
+            const user = context.payload.issue.user.login;
+            const org = 'DITN1B-PUO-2025-2026';
+            const issue_number = context.issue.number;
+            const repo = context.repo.repo;
+            
+            let message = '';
+
+            try {
+              // 1. Attempt to invite the user to the organization
+              await github.rest.orgs.setMembershipForUser({
+                org: org,
+                username: user,
+                role: 'member' // or 'admin', depending on your goal
+              });
+              
+              message = `**Welcome to ${org}!** 🎉 You have been invited successfully.`;
+
+            } catch (error) {
+              // Handle case where user is already a member (HTTP 422 - Unprocessable Entity)
+              if (error.status === 422) {
+                 message = `Hello @${user}, you are **already a member** of the ${org} organization :D`;
+              } else {
+                 // Log other errors (e.g., token scope issue)
+                 console.error('Invite failed:', error);
+                 message = `**ERROR:** I could not invite you due to an internal error. Please contact an admin. (Error Status: ${error.status})`;
+              }
+            }
+
+            // 2. Post the result as a comment on the issue
+            // We use the same powerful token here, which has organization and repo/issue write scopes
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: repo,
+              issue_number: issue_number,
+              body: message
+            });
