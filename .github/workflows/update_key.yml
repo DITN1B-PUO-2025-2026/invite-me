@@ -15,7 +15,7 @@ jobs:
       - name: Setup timezone
         uses: zcong1993/setup-timezone@master
         with:
-          timezone: Asia/Shanghai
+          timezone: Asia/Kuala_Lumpur
 
       - name: Generate Random Label Key
         id: generate_key
@@ -66,14 +66,8 @@ jobs:
           # Use the environment variables ($VARIABLE_NAME) in the curl command
           echo "Sending Discord notification with @everyone ping..."
 
-          CURL_COMMAND="curl -s -X POST \
-               -H \"Authorization: $BOT_AUTHORIZATION_HEADER\" \
-               -H \"Content-Type: application/json\" \
-               -d '$DISCORD_PAYLOAD' \
-               -o /dev/null \
-               \"$DISCORD_WEBHOOK_URL\""
+          CURL_COMMAND="curl -s -X POST -H \"Authorization: $BOT_AUTHORIZATION_HEADER\" -H \"Content-Type: application/json\" -d '$DISCORD_PAYLOAD' -o /dev/null \"$DISCORD_WEBHOOK_URL\""
 
-          # Execute the command secretly
           bash -c "$CURL_COMMAND"
 
           echo "✅ Discord notification sent."
