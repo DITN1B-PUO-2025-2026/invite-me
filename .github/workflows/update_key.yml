@@ -35,40 +35,53 @@ jobs:
           gh secret set $SECRET_NAME --body "$NEW_KEY" -R $GITHUB_REPOSITORY
           echo "🔄 Secret ${{ env.SECRET_NAME }} has been updated."
 
-      - name: Send New Key to Discord via Webhook
+      - name: Send New Key to Discord via API (Non-Shell)
+        id: send_discord
+        uses: actions/github-script@v6
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }} # Pass URL to env
-          BOT_AUTHORIZATION_HEADER: ${{ secrets.BOT_AUTHORIZATION_HEADER }} # Pass Authorization Header to env
           NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
-        run: |
-          DISCORD_PAYLOAD='{
-            "content": "**🔑 GitHub Invite Key Rotated!**",
-            "embeds": [
-              {
-                "title": "Organization Invitation Label Key",
-                "description": "The key has been updated. Use this new key in an issue https://github.com/DITN1B-PUO-2025-2026/invite-me/issues",
-                "color": 3447003,
-                "fields": [
-                  {
-                    "name": "🔑 Current Key",
-                    "value": "'"'"$NEW_KEY"'"'",
-                    "inline": false
-                  }
-                ],
-                "footer": {
-                  "text": "Key updated at '"'"$(date +%Y-%m-%d\ %H:%M\ UTC)"'"'"
+          BOT_AUTH_HEADER: ${{ secrets.BOT_AUTHORIZATION_HEADER }}
+          DISCORD_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        with:
+          # Use Node.js to securely build and send the request
+          script: |
+            const key = process.env.NEW_KEY;
+            const authHeader = process.env.BOT_AUTH_HEADER;
+            const discordUrl = process.env.DISCORD_URL;
+            const dateString = new Date().toISOString().slice(0, 16).replace('T', ' ');
+            
+            // 1. Construct the JSON payload (JavaScript object)
+            const payload = {
+              content: "@everyone **🔑 GitHub Invite Key Rotated!**",
+              embeds: [{
+                title: "New Organization Invitation Label Key",
+                description: "The key has been updated. Use this new key in an issue >",
+                color: 3447003,
+                fields: [{
+                  name: "🔑 Current Key",
+                  value: key,
+                  inline: false
+                }],
+                footer: {
+                  // Note: This uses Node's standard time, adjust as needed.
+                  text: `Key updated at ${dateString} UTC`
                 }
-              }
-            ]
-          }'
+              }]
+            };
 
-          CURL_COMMAND="curl -s -X POST \
-               -H \"Authorization: $BOT_AUTHORIZATION_HEADER\" \
-               -H \"Content-Type: application/json\" \
-               -d '$DISCORD_PAYLOAD' \
-               -o /dev/null \
-               \"$DISCORD_WEBHOOK_URL\""
+            // 2. Use fetch (Node's standard HTTP client) to send the request
+            const response = await fetch(discordUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                // Authorization header is passed here
+                'Authorization': authHeader
+              },
+              body: JSON.stringify(payload)
+            });
 
-          bash -c "$CURL_COMMAND"
-
-          echo "📨 New key has been sent to Discord."
+            // 3. Fail the step if the API call fails (e.g., HTTP 400, 403)
+            if (!response.ok) {
+              const responseBody = await response.text();
+              throw new Error(`Discord API failed with status ${response.status}: ${responseBody}`);
+            }
