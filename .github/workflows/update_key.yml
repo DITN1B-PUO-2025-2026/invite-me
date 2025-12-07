@@ -67,3 +67,5 @@ jobs:
                -H "Content-Type: application/json" \
                -d "$DISCORD_PAYLOAD" \
                "${DISCORD_WEBHOOK_URL}"
+
+          echo "📨 New key has been sent to Discord."
