@@ -15,8 +15,7 @@ jobs:
         with:
           organization: DITN1B-PUO-2025-2026
           label: ${{ secrets.INVITE_LABEL_KEY }}
-          # REMOVE: repo-token is not the correct input for this specific action
-          # repo-token: ${{ secrets.INVITE_TOKEN }} 
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
           comment: 'Welcome to the Org. You have been invited successfully! 🎉'
           existingMemberMessage: 'You are already a member of the organization :D '
         # FIX: Pass the token as an environment variable named INVITE_TOKEN
