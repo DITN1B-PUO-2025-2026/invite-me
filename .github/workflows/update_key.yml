@@ -61,13 +61,4 @@ jobs:
                -H "Content-Type: application/json" \
                -d "$DISCORD_PAYLOAD" \
                "${{ secrets.DISCORD_WEBHOOK_URL }}"
-
-      - name: Invite on label
-        uses: vj-abigo/invite-on-label@v1.4
-        with:
-          organization: DITN1B-PUO-2025-2026
-          label: ${{ env.SECRET_NAME }}
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          comment: 'Welcome to the Org.'
-        env:
-          INVITE_TOKEN: ${{ secrets.INVITE_TOKEN }}
+               
