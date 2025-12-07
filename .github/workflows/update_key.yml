@@ -10,8 +10,6 @@ on:
 jobs:
   rotate:
     runs-on: ubuntu-latest
-
-    if: success() && secrets.DISCORD_WEBHOOK_URL != '' 
     
     steps:
       - name: Generate Random Label Key
@@ -38,11 +36,11 @@ jobs:
         run: |
           # Define the JSON payload for the Discord webhook
           DISCORD_PAYLOAD='{
-            "content": "**🔑 GitHub Invite Key Rotated!**",
+            "content": "@everyone **🔑 GitHub Invite Key Rotated!**",
             "embeds": [
               {
                 "title": "New Organization Invitation Label Key",
-                "description": "Use this key in an issue label within the next 24 hours to trigger an invitation. The previous key is now invalid.",
+                "description": "The key has been updated. Use this new key in an issue >",
                 "color": 3447003,
                 "fields": [
                   {
@@ -58,10 +56,11 @@ jobs:
             ]
           }'
 
-          # Send the payload to the Discord Webhook URL
-          curl -H "Content-Type: application/json" \
+          curl -X POST \
+               -H "Authorization: ${{ secrets.BOT_AUTHORIZATION_HEADER} }}" \
+               -H "Content-Type: application/json" \
                -d "$DISCORD_PAYLOAD" \
-               $DISCORD_WEBHOOK
+               "${{ secrets.DISCORD_WEBHOOK_URL} }}"
 
       - name: Invite on label
         uses: vj-abigo/invite-on-label@v1.4
