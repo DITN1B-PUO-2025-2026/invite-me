@@ -1,0 +1,19 @@
+name: Invite user on issue label
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  invite:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invite on label
+        uses: vj-abigo/invite-on-label@v1.4
+        with:
+          organization: DITN1B-PUO-2025-2026
+          # This pulls the latest key stored by the 'update_key.yml' workflow
+          label: ${{ secrets.INVITE_LABEL_KEY }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          comment: 'Welcome to the Org.'
+        env:
+          INVITE_TOKEN: ${{ secrets.INVITE_TOKEN }}
