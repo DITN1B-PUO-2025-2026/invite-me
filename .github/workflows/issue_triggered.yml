@@ -14,20 +14,17 @@ jobs:
       issues: write # Grants GITHUB_TOKEN permission to post comments AND close issues
       contents: read
     
-    # 1. Decide which content to check (Issue Body vs. Comment Body)
-    # This job runs whenever an issue or a comment is created/edited.
     steps:
       - name: Determine Content Source and Extract Key
         id: determine_content
         env:
           EXPECTED_KEY: ${{ secrets.INVITE_LABEL_KEY }}
         run: |
-          # The issue body is always available, but we prioritize the new comment body if it exists.
+          # Prioritize the new comment body if it exists and is not from a bot
           ISSUE_BODY="${{ github.event.issue.body }}"
-          COMMENT_BODY="${{ github.event.comment.body }}" # Only set if trigger is issue_comment
+          COMMENT_BODY="${{ github.event.comment.body }}"
           
           CONTENT_TO_CHECK="$ISSUE_BODY"
-          # If a new comment was created and it's not by a bot, use the comment content
           if [ -n "$COMMENT_BODY" ] && [ "${{ github.event.comment.user.type }}" != "Bot" ]; then
               CONTENT_TO_CHECK="$COMMENT_BODY"
               echo "Checking new comment content."
@@ -36,14 +33,12 @@ jobs:
           fi
           
           # Robust extraction: find 'INVITE_KEY:' and extract the value after it.
-          # The key must be present in the content to be found.
           INVITE_KEY=$(echo "$CONTENT_TO_CHECK" | grep -i 'INVITE_KEY:' | awk -F':' '{print $2}' | xargs)
           EXPECTED_KEY_CLEAN=$(echo "$EXPECTED_KEY" | xargs)
           
           echo "Expected Key: $EXPECTED_KEY_CLEAN"
           echo "User Key: $INVITE_KEY"
           
-          # 2. Set output for the next step
           if [ -n "$INVITE_KEY" ] && [ "$INVITE_KEY" == "$EXPECTED_KEY_CLEAN" ]; then
             echo "key_matched=true" >> $GITHUB_OUTPUT
             echo "issue_user=${{ github.event.issue.user.login }}" >> $GITHUB_OUTPUT
@@ -72,7 +67,7 @@ jobs:
 
             if (userOrg.role === 'admin' || userOrg.state === 'active') {
                 message = `Hello @${user}, you are **already an active member** of the ${org} organization :D.`;
-                shouldClose = true; // Close if they're already a member
+                shouldClose = true;
             } else {
                 try {
                   // Attempt to invite the user
@@ -83,12 +78,12 @@ jobs:
                   });
                   
                   message = `**Welcome to ${org}, @${user}!** 🎉 You have been invited successfully.`;
-                  shouldClose = true; // Close on successful invite
+                  shouldClose = true;
 
                 } catch (error) {
                    console.error('Invite failed:', error);
                    message = `**ERROR:** The invite failed with status **${error.status}**. Please check the INVITE_TOKEN scope.`;
-                   shouldClose = false; // Keep open on error
+                   shouldClose = false;
                 }
             }
             
@@ -97,9 +92,8 @@ jobs:
 
       - name: Post Comment and Manage Issue Status
         uses: actions/github-script@v6
-        # This step runs regardless of key match, or if the invite step was skipped (to post failure message)
+        id: comment_and_close
         with:
-          # Use the GITHUB_TOKEN for commenting and closing
           github-token: ${{ secrets.GITHUB_TOKEN }} 
           script: |
             const isInviteStepSkipped = '${{ steps.invite.outcome }}' === 'skipped';
@@ -107,7 +101,6 @@ jobs:
             let commentBody = '';
             let shouldClose = false;
             
-            // If the invite step ran, use its output
             if (!isInviteStepSkipped) {
                 commentBody = '${{ steps.invite.outputs.comment_body }}';
                 shouldClose = '${{ steps.invite.outputs.close_issue }}' === 'true';
@@ -116,7 +109,6 @@ jobs:
                 commentBody = "The secret key provided is incorrect. Please ensure you have the correct key and the format is **INVITE_KEY: YOUR\_KEY**. The issue remains open.";
                 shouldClose = false;
             } else {
-                // Edge case: should not happen if logic is correct, but handles if the action was triggered by a non-key-modifying edit/comment
                 return; 
             }
             
@@ -137,4 +129,89 @@ jobs:
                     state: 'closed'
                 });
                 console.log(`Issue ${context.issue.number} closed successfully.`);
+            }
+            core.setOutput('issue_was_closed', shouldClose);
+
+      - name: Update new key and timezone info if issue was closed
+        uses: actions/github-script@v6
+        # Run only if the issue was successfully closed in the previous step
+        if: steps.comment_and_close.outputs.issue_was_closed == 'true'
+        with:
+          timezone: Asia/Kuala_Lumpur
+
+      - name: Generate Random Label Key
+        id: generate_key
+        run: |
+          # Generates a 32-character hexadecimal string
+          NEW_KEY=$(openssl rand -hex 4)
+          echo "::add-mask::$NEW_KEY"
+          echo "NEW_KEY=$NEW_KEY" >> $GITHUB_OUTPUT
+
+      - name: Update Repository Secret
+        env:
+          GH_TOKEN: ${{ secrets.PAT_FOR_SECRETS_UPDATE }}
+          NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
+          SECRET_NAME: INVITE_LABEL_KEY
+        run: |
+          # Use the GitHub CLI to update the secret
+          gh secret set $SECRET_NAME --body "$NEW_KEY" -R $GITHUB_REPOSITORY
+          echo "🔄 Secret ${{ env.SECRET_NAME }} has been updated."
+
+      - name: Send New Key to Discord via API (Non-Shell)
+        id: send_discord
+        uses: actions/github-script@v6
+        env:
+          NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
+          BOT_AUTH_HEADER: ${{ secrets.BOT_AUTHORIZATION_HEADER }}
+          DISCORD_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        with:
+          script: |
+            const key = process.env.NEW_KEY;
+            const authHeader = process.env.BOT_AUTH_HEADER;
+            const discordUrl = process.env.DISCORD_URL;
+            
+            // 🚨 Timezone FIX: Use sv-SE locale for YYYY-MM-DD HH:MM format in Kuala Lumpur timezone (MYT) 🚨
+            const mytTime = new Date().toLocaleString('en-GB', {
+              timeZone: 'Asia/Kuala_Lumpur',
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true // This ensures AM/PM is used
+            });
+            
+            // 1. Construct the JSON payload (JavaScript object)
+            const payload = {
+              content: "@everyone **🔑 GitHub Invite Key Rotated!**",
+              embeds: [{
+                title: "New user detected",
+                description: "The key has been updated. Use this new key in an issue >",
+                color: 3447003,
+                fields: [{
+                  name: "🔑 Current Key",
+                  value: key,
+                  inline: false
+                }],
+                footer: {
+                  // Use the localized time string and manually append the MYT suffix
+                  text: `Key updated at ${mytTime} MYT`
+                }
+              }]
+            };
+            
+            // 2. Use fetch (Node's standard HTTP client) to send the request
+            const response = await fetch(discordUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': authHeader
+              },
+              body: JSON.stringify(payload)
+            });
+
+            // 3. Fail the step if the API call fails (e.g., HTTP 400, 403)
+            if (!response.ok) {
+              const responseBody = await response.text();
+              throw new Error(`Discord API failed with status ${response.status}: ${responseBody}`);
             }
