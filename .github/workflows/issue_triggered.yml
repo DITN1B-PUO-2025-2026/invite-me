@@ -1,32 +1,52 @@
-name: Invite user from Issue Body Key
+name: Invite User and Manage Issue Status
 on:
   issues:
-    types: [opened] 
+    # Triggers on new issues and issue edits (for key check/recheck)
+    types: [opened, edited] 
+  issue_comment:
+    # Triggers when a user replies with a new key in a comment
+    types: [created]
 
 jobs:
   invite:
     runs-on: ubuntu-latest
     permissions:
-      issues: write # Grants the GITHUB_TOKEN permission to post comments
+      issues: write # Grants GITHUB_TOKEN permission to post comments AND close issues
       contents: read
-    if: github.event_name == 'issues' && github.event.action == 'opened'
+    
+    # 1. Decide which content to check (Issue Body vs. Comment Body)
+    # This job runs whenever an issue or a comment is created/edited.
     steps:
-      - name: Extract Key from Issue Body and Compare
-        id: extract
+      - name: Determine Content Source and Extract Key
+        id: determine_content
         env:
-          # IMPORTANT: This secret MUST be set to your actual secret string (e.g., GUESTPASS2025)
           EXPECTED_KEY: ${{ secrets.INVITE_LABEL_KEY }}
         run: |
-          # Robust extraction: find the line, then use awk to get the value after the colon.
-          INVITE_KEY=$(echo "${{ github.event.issue.body }}" | grep -i 'INVITE_KEY:' | awk -F':' '{print $2}' | xargs)
+          # The issue body is always available, but we prioritize the new comment body if it exists.
+          ISSUE_BODY="${{ github.event.issue.body }}"
+          COMMENT_BODY="${{ github.event.comment.body }}" # Only set if trigger is issue_comment
+          
+          CONTENT_TO_CHECK="$ISSUE_BODY"
+          # If a new comment was created and it's not by a bot, use the comment content
+          if [ -n "$COMMENT_BODY" ] && [ "${{ github.event.comment.user.type }}" != "Bot" ]; then
+              CONTENT_TO_CHECK="$COMMENT_BODY"
+              echo "Checking new comment content."
+          else
+              echo "Checking issue body content."
+          fi
+          
+          # Robust extraction: find 'INVITE_KEY:' and extract the value after it.
+          # The key must be present in the content to be found.
+          INVITE_KEY=$(echo "$CONTENT_TO_CHECK" | grep -i 'INVITE_KEY:' | awk -F':' '{print $2}' | xargs)
           EXPECTED_KEY_CLEAN=$(echo "$EXPECTED_KEY" | xargs)
           
           echo "Expected Key: $EXPECTED_KEY_CLEAN"
           echo "User Key: $INVITE_KEY"
           
-          # Set output for the next step to use
-          if [ "$INVITE_KEY" == "$EXPECTED_KEY_CLEAN" ]; then
+          # 2. Set output for the next step
+          if [ -n "$INVITE_KEY" ] && [ "$INVITE_KEY" == "$EXPECTED_KEY_CLEAN" ]; then
             echo "key_matched=true" >> $GITHUB_OUTPUT
+            echo "issue_user=${{ github.event.issue.user.login }}" >> $GITHUB_OUTPUT
           else
             echo "key_matched=false" >> $GITHUB_OUTPUT
           fi
@@ -34,64 +54,87 @@ jobs:
       - name: Invite User (using PAT)
         uses: actions/github-script@v6
         id: invite
-        # Use the powerful INVITE_TOKEN (PAT) for the sensitive Organization API call
+        # Only run this step if the key was matched
+        if: steps.determine_content.outputs.key_matched == 'true'
         with:
           github-token: ${{ secrets.INVITE_TOKEN }} 
           script: |
-            const keyMatched = '${{ steps.extract.outputs.key_matched }}';
             const user = context.payload.issue.user.login;
             const org = 'DITN1B-PUO-2025-2026';
-            
             let message = '';
-            
-            // --- SCENARIO 1: KEY MATCH FAILURE ---
-            if (keyMatched === 'false') {
-                message = "The secret key provided in the issue body is incorrect. Please ensure you have the correct key and the format is **INVITE_KEY: YOUR_KEY**. The issue remains open.";
-            } 
-            // --- SCENARIO 2: KEY MATCH SUCCESS ---
-            else {
-                // Check if the user is already an owner/admin (This bypasses the 403 demotion error)
-                const { data: userOrg } = await github.rest.orgs.getMembershipForUser({
-                  org: org,
-                  username: user,
-                }).catch(() => ({ data: { role: null } })); // Catch if user is not a member (404)
+            let shouldClose = false;
 
-                if (userOrg.role === 'admin' || userOrg.state === 'active') {
-                    // This handles the 403 "You cannot demote yourself" scenario if the user is an owner/admin
-                    message = `Hello @${user}, you are **already an active member** of the ${org} organization :D.`;
-                } else {
-                    try {
-                      // Attempt to invite the user (role: 'member')
-                      await github.rest.orgs.setMembershipForUser({
-                        org: org,
-                        username: user,
-                        role: 'member'
-                      });
-                      
-                      message = `**Welcome to ${org}, @${user}!** 🎉 You have been invited successfully.`;
+            // Check if the user is already an active member/admin
+            const { data: userOrg } = await github.rest.orgs.getMembershipForUser({
+              org: org,
+              username: user,
+            }).catch(() => ({ data: { role: null } })); 
 
-                    } catch (error) {
-                       // Log other errors
-                       console.error('Invite failed:', error);
-                       message = `**ERROR:** The invite failed with status **${error.status}**. Please ensure the INVITE_TOKEN has the 'admin:org' scope.`;
-                    }
+            if (userOrg.role === 'admin' || userOrg.state === 'active') {
+                message = `Hello @${user}, you are **already an active member** of the ${org} organization :D.`;
+                shouldClose = true; // Close if they're already a member
+            } else {
+                try {
+                  // Attempt to invite the user
+                  await github.rest.orgs.setMembershipForUser({
+                    org: org,
+                    username: user,
+                    role: 'member'
+                  });
+                  
+                  message = `**Welcome to ${org}, @${user}!** 🎉 You have been invited successfully.`;
+                  shouldClose = true; // Close on successful invite
+
+                } catch (error) {
+                   console.error('Invite failed:', error);
+                   message = `**ERROR:** The invite failed with status **${error.status}**. Please check the INVITE_TOKEN scope.`;
+                   shouldClose = false; // Keep open on error
                 }
             }
             
-            // Pass the resulting message to the next step for commenting
             core.setOutput('comment_body', message);
+            core.setOutput('close_issue', shouldClose);
 
-      - name: Post Comment (using GITHUB_TOKEN)
+      - name: Post Comment and Manage Issue Status
         uses: actions/github-script@v6
-        # Use the default GITHUB_TOKEN, which has 'issues: write' permission.
+        # This step runs regardless of key match, or if the invite step was skipped (to post failure message)
         with:
+          # Use the GITHUB_TOKEN for commenting and closing
           github-token: ${{ secrets.GITHUB_TOKEN }} 
           script: |
-            const commentBody = '${{ steps.invite.outputs.comment_body }}';
+            const isInviteStepSkipped = '${{ steps.invite.outcome }}' === 'skipped';
+            const keyMatched = '${{ steps.determine_content.outputs.key_matched }}';
+            let commentBody = '';
+            let shouldClose = false;
             
+            // If the invite step ran, use its output
+            if (!isInviteStepSkipped) {
+                commentBody = '${{ steps.invite.outputs.comment_body }}';
+                shouldClose = '${{ steps.invite.outputs.close_issue }}' === 'true';
+            } else if (keyMatched === 'false') {
+                // If the invite step was skipped because the key failed, post a failure comment
+                commentBody = "The secret key provided is incorrect. Please ensure you have the correct key and the format is **INVITE_KEY: YOUR\_KEY**. The issue remains open.";
+                shouldClose = false;
+            } else {
+                // Edge case: should not happen if logic is correct, but handles if the action was triggered by a non-key-modifying edit/comment
+                return; 
+            }
+            
+            // 1. Post the result as a comment
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: commentBody
             });
+
+            // 2. Close the issue if the flag is true
+            if (shouldClose) {
+                await github.rest.issues.update({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    state: 'closed'
+                });
+                console.log(`Issue ${context.issue.number} closed successfully.`);
+            }
