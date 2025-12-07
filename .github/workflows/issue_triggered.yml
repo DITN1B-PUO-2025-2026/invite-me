@@ -41,7 +41,8 @@ jobs:
           
           if [ -n "$INVITE_KEY" ] && [ "$INVITE_KEY" == "$EXPECTED_KEY_CLEAN" ]; then
             echo "key_matched=true" >> $GITHUB_OUTPUT
-            echo "issue_user=${{ github.event.issue.user.login }}" >> $GITHUB_OUTPUT
+            # Store the user's login for the Discord notification step
+            echo "issue_user=${{ github.event.issue.user.login }}" >> $GITHUB_OUTPUT 
           else
             echo "key_matched=false" >> $GITHUB_OUTPUT
           fi
@@ -101,15 +102,16 @@ jobs:
             let commentBody = '';
             let shouldClose = false;
             
+            // Get output from the invite step (if it ran)
             if (!isInviteStepSkipped) {
                 commentBody = '${{ steps.invite.outputs.comment_body }}';
                 shouldClose = '${{ steps.invite.outputs.close_issue }}' === 'true';
             } else if (keyMatched === 'false') {
-                // If the invite step was skipped because the key failed, post a failure comment
-                commentBody = "The secret key provided is incorrect. Please ensure you have the correct key and the format is **INVITE_KEY: YOUR\_KEY**. The issue remains open.";
+                // If the key failed, post a failure comment
+                commentBody = "The secret key provided is incorrect. Please ensure you have the correct key and the format is **INVITE_KEY: YOUR\\_KEY**. The issue remains open.";
                 shouldClose = false;
             } else {
-                return; 
+                return; // Nothing happened, do nothing
             }
             
             // 1. Post the result as a comment
@@ -132,86 +134,63 @@ jobs:
             }
             core.setOutput('issue_was_closed', shouldClose);
 
-      - name: Update new key and timezone info if issue was closed
+      - name: Send Successful Invite Notification to Discord
         uses: actions/github-script@v6
-        # Run only if the issue was successfully closed in the previous step
+        # Only run if the issue was successfully closed (meaning the invite succeeded)
         if: steps.comment_and_close.outputs.issue_was_closed == 'true'
-        with:
-          timezone: Asia/Kuala_Lumpur
-
-      - name: Generate Random Label Key
-        id: generate_key
-        run: |
-          # Generates a 32-character hexadecimal string
-          NEW_KEY=$(openssl rand -hex 4)
-          echo "::add-mask::$NEW_KEY"
-          echo "NEW_KEY=$NEW_KEY" >> $GITHUB_OUTPUT
-
-      - name: Update Repository Secret
         env:
-          GH_TOKEN: ${{ secrets.PAT_FOR_SECRETS_UPDATE }}
-          NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
-          SECRET_NAME: INVITE_LABEL_KEY
-        run: |
-          # Use the GitHub CLI to update the secret
-          gh secret set $SECRET_NAME --body "$NEW_KEY" -R $GITHUB_REPOSITORY
-          echo "🔄 Secret ${{ env.SECRET_NAME }} has been updated."
-
-      - name: Send New Key to Discord via API (Non-Shell)
-        id: send_discord
-        uses: actions/github-script@v6
-        env:
-          NEW_KEY: ${{ steps.generate_key.outputs.NEW_KEY }}
-          BOT_AUTH_HEADER: ${{ secrets.BOT_AUTHORIZATION_HEADER }}
           DISCORD_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          BOT_AUTH_HEADER: ${{ secrets.BOT_AUTHORIZATION_HEADER }}
+          INVITED_USER: ${{ steps.determine_content.outputs.issue_user }}
         with:
           script: |
-            const key = process.env.NEW_KEY;
-            const authHeader = process.env.BOT_AUTH_HEADER;
+            // Make sure the fetch function is available for API calls
+            const { fetch } = require('undici');
+            
             const discordUrl = process.env.DISCORD_URL;
+            const authHeader = process.env.BOT_AUTH_HEADER;
+            const invitedUser = process.env.INVITED_USER;
+            const org = 'DITN1B-PUO-2025-2026';
             
-            // 🚨 Timezone FIX: Use sv-SE locale for YYYY-MM-DD HH:MM format in Kuala Lumpur timezone (MYT) 🚨
-            const mytTime = new Date().toLocaleString('en-GB', {
-              timeZone: 'Asia/Kuala_Lumpur',
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true // This ensures AM/PM is used
-            });
-            
-            // 1. Construct the JSON payload (JavaScript object)
+            // Construct the Discord payload (simple message and rich embed)
             const payload = {
-              content: "@everyone **🔑 GitHub Invite Key Rotated!**",
+              content: `**New Member Alert!** 🔔`,
               embeds: [{
-                title: "New user detected",
-                description: "The key has been updated. Use this new key in an issue >",
-                color: 3447003,
-                fields: [{
-                  name: "🔑 Current Key",
-                  value: key,
-                  inline: false
-                }],
-                footer: {
-                  // Use the localized time string and manually append the MYT suffix
-                  text: `Key updated at ${mytTime} MYT`
-                }
+                title: `✅ User Invited and Issue Closed`,
+                description: `**@${invitedUser}** has successfully joined the **${org}** organization.`,
+                color: 3066993, // A nice green color
+                fields: [
+                  {
+                    name: "GitHub User",
+                    value: `[${invitedUser}](https://github.com/${invitedUser})`,
+                    inline: true
+                  },
+                  {
+                    name: "Issue Closed",
+                    value: `#${context.issue.number}`,
+                    inline: true
+                  }
+                ],
+                // Adds a time-of-event stamp
+                timestamp: (new Date()).toISOString(), 
               }]
             };
-            
-            // 2. Use fetch (Node's standard HTTP client) to send the request
+
+            // Send the Discord notification
             const response = await fetch(discordUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': authHeader
+                'Authorization': authHeader 
               },
               body: JSON.stringify(payload)
             });
 
-            // 3. Fail the step if the API call fails (e.g., HTTP 400, 403)
             if (!response.ok) {
               const responseBody = await response.text();
-              throw new Error(`Discord API failed with status ${response.status}: ${responseBody}`);
+              console.error(`Discord API failed: ${response.status} - ${responseBody}`);
+              // Note: We don't throw an error here, as a failed notification 
+              // shouldn't undo the successful invite and issue closure.
+            } else {
+              console.log('Successfully sent Discord notification for new member.');
             }
