@@ -166,6 +166,7 @@ jobs:
           INVITED_USER: ${{ steps.determine_content.outputs.issue_user }}
         with:
           script: |
+            const key = process.env.NEW_KEY;
             const discordUrl = process.env.DISCORD_URL;
             const authHeader = process.env.BOT_AUTH_HEADER;
             const invitedUser = process.env.INVITED_USER;
