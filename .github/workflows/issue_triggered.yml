@@ -192,7 +192,8 @@ jobs:
                 ],
                 // Adds a time-of-event stamp
                 timestamp: (new Date()).toISOString(), 
-
+                },
+                {
                 title: "@everyone **🔑 GitHub Invite Key Rotated!**",
                 description: "The key has been updated. Use this new key in an issue >",
                 color: 3447003,
