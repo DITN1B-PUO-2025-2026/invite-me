@@ -193,7 +193,6 @@ jobs:
                 // Adds a time-of-event stamp
                 timestamp: (new Date()).toISOString(), 
               }]
-              content: `@everyone **🔑 GitHub Invite Key Rotated!**',
               embeds: [{
                 title: "New Organization Invitation Label Key",
                 description: "The key has been updated. Use this new key in an issue >",
