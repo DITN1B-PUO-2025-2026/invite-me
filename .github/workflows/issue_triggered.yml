@@ -172,6 +172,17 @@ jobs:
             const invitedUser = process.env.INVITED_USER;
             const org = 'DITN1B-PUO-2025-2026';
             
+            // 🚨 Timezone FIX: Use sv-SE locale for YYYY-MM-DD HH:MM format in Kuala Lumpur timezone (MYT) 🚨
+            const mytTime = new Date().toLocaleString('en-GB', {
+              timeZone: 'Asia/Kuala_Lumpur',
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true // This ensures AM/PM is used
+            });
+            
             // Construct the Discord payload (simple message and rich embed)
             const payload = {
               content: `**New Member Alert!** 🔔`,
