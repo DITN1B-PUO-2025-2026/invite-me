@@ -167,6 +167,12 @@ jobs:
         with:
           script: |
             const key = process.env.NEW_KEY;
+            const keyString = key ?? '';
+            if (!keyString) {
+              console.warn('NEW_KEY is empty or undefined');
+            }
+            // Masked log so we can confirm presence without leaking the key in logs
+            console.log(`NEW_KEY present: ${keyString ? '***masked***' : 'missing'}`);
             const discordUrl = process.env.DISCORD_URL;
             const authHeader = process.env.BOT_AUTH_HEADER;
             const invitedUser = process.env.INVITED_USER;
@@ -211,7 +217,7 @@ jobs:
                 color: 3447003,
                 fields: [{
                   name: "🔑 Current Key",
-                  text: 'INVITE_KEY: ${key}',
+                  value: `INVITE_KEY: ${keyString}`,
                   inline: false
                 }],
                 footer: {
