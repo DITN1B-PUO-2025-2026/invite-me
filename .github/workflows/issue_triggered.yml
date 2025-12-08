@@ -182,7 +182,7 @@ jobs:
               minute: '2-digit',
               hour12: true // This ensures AM/PM is used
             });
-            
+
             // Construct the Discord payload (simple message and rich embed)
             const payload = {
               content: `**New Member Alert!** 🔔`,
@@ -211,7 +211,7 @@ jobs:
                 color: 3447003,
                 fields: [{
                   name: "🔑 Current Key",
-                  value: key,
+                  value: 'INVITE_KEY: ${key}',
                   inline: false
                 }],
                 footer: {
