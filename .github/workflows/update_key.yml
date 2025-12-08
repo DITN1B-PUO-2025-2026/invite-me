@@ -68,7 +68,7 @@ jobs:
               content: "@everyone **🔑 GitHub Invite Key Rotated!**",
               embeds: [{
                 title: "New Organization Invitation Label Key",
-                description: "The key has been updated. Use this new key in an issue >",
+                description: "The key has been updated. Use this new key in an issue > [Github Issues](https://github.com/DITN1B-PUO-2025-2026/invite-me/issues/new)",
                 color: 3447003,
                 fields: [{
                   name: "🔑 Current Key",
