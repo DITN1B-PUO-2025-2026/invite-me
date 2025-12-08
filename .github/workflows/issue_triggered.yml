@@ -144,9 +144,6 @@ jobs:
           INVITED_USER: ${{ steps.determine_content.outputs.issue_user }}
         with:
           script: |
-            // Make sure the fetch function is available for API calls
-            const { fetch } = require('undici');
-            
             const discordUrl = process.env.DISCORD_URL;
             const authHeader = process.env.BOT_AUTH_HEADER;
             const invitedUser = process.env.INVITED_USER;
