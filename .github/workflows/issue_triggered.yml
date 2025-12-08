@@ -211,7 +211,7 @@ jobs:
                 color: 3447003,
                 fields: [{
                   name: "🔑 Current Key",
-                  value: 'INVITE_KEY: ${key}',
+                  text: 'INVITE_KEY: ${key}',
                   inline: false
                 }],
                 footer: {
