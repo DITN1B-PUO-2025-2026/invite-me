@@ -45,6 +45,10 @@ jobs:
         with:
           script: |
             const key = process.env.NEW_KEY;
+            const keyString = key ?? '';
+            if (!keyString) {
+              console.warn('NEW_KEY is empty or undefined');
+            }
             const authHeader = process.env.BOT_AUTH_HEADER;
             const discordUrl = process.env.DISCORD_URL;
             
@@ -68,7 +72,7 @@ jobs:
                 color: 3447003,
                 fields: [{
                   name: "🔑 Current Key",
-                  value: key,
+                  value: `INVITE_KEY: ${keyString}`,
                   inline: false
                 }],
                 footer: {
